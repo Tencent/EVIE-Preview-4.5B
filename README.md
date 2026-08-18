@@ -88,10 +88,12 @@ inference: false
 
 | Visual tokens / page | **V3 public** | Vectors / page | Raw index / 1M pages (BF16) |
 | :--- | ---: | ---: | ---: |
-| 768 | 64.56 | **751.62** | **179.2 GiB** |
-| 1,792 | **65.36** | 1,763.58 | 420.5 GiB |
+| 768 (training budget) | 64.56 | **751.62** | **179.2 GiB** |
+| 1,792 (extrapolated) | **65.36** | 1,763.58 | 420.5 GiB |
 
-Both rows are the same weights — no retraining, no re-export. Pick whichever tier fits your compute budget; 7 of the 8 domains keep improving as the page budget grows.
+**EVIE was trained at 768 visual tokens per page.** The 1,792 tier is pure test-time extrapolation — the same weights, never trained or fine-tuned at that budget, and never re-exported. That the model does not merely hold up but *gains* 0.80 nDCG@10 at more than twice its training budget, improving in 7 of the 8 domains, is a direct read on how well its page representation generalises beyond the resolution it was fit to.
+
+Pick whichever tier fits your compute budget.
 
 The lighter tier holds a million pages in under 180 GiB.
 
