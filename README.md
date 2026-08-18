@@ -189,10 +189,14 @@ ColPali Engine is the reference path — every number on this card comes from it
 ### Installation
 
 ```bash
-pip install -r requirements.txt
+pip install "colpali-engine>=0.3.15" accelerate
 ```
 
+Or `pip install -r requirements.txt` if you cloned the repository; that adds `pyarrow`, which only [`reproduce.py`](reproduce.py) needs.
+
 ### Python Inference
+
+Self-contained — nothing to clone, no local files to prepare.
 
 ```python
 import torch
@@ -200,9 +204,19 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from colpali_engine.models import ColQwen3_5, ColQwen3_5Processor
 
-from bidirectional import enable_bidirectional_attention
-
 model_id = "tencent/EVIE-Preview-4.5B"
+
+
+def enable_bidirectional_attention(model):
+    """Encoder-ize the full-attention layers; the GatedDeltaNet layers stay recurrent."""
+    for cfg in (model.config, getattr(model.config, "text_config", None)):
+        if cfg is not None:
+            cfg.is_causal = False
+    for module in model.modules():
+        if module.__class__.__name__ in ("Qwen3_5Attention", "Qwen3Attention"):
+            if hasattr(module, "is_causal"):
+                module.is_causal = False
+
 
 # 1. Load model and enable bidirectional attention
 model = ColQwen3_5.from_pretrained(
@@ -244,7 +258,7 @@ print("Best page per query:", scores.argmax(dim=1))
 # Best page per query: tensor([0, 1])
 ```
 
-> ⚠️ Apply `enable_bidirectional_attention(model)` once after loading, and reset `model.rope_deltas = None` before every query forward pass. Both are required to reach the scores above. [`bidirectional.py`](bidirectional.py) ships with this repository because released `colpali-engine` builds ColQwen3.5 with causal masks; run the snippet from the repository root so the import resolves.
+> ⚠️ Apply `enable_bidirectional_attention(model)` once after loading, and reset `model.rope_deltas = None` before every query forward pass. Both are required to reach the scores above — released `colpali-engine` (through 0.3.17) builds ColQwen3.5 with causal masks, which costs about 1.1 on top-hit MaxSim. The same helper ships as [`bidirectional.py`](bidirectional.py) for `infer.py` and `reproduce.py`.
 
 ### CLI
 
