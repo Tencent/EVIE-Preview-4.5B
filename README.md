@@ -196,6 +196,7 @@ pip install -r requirements.txt
 
 ```python
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from colpali_engine.models import ColQwen3_5, ColQwen3_5Processor
 
@@ -215,9 +216,16 @@ enable_bidirectional_attention(model)
 # 2. Load processor
 processor = ColQwen3_5Processor.from_pretrained(model_id)
 
-# 3. Prepare inputs
-images = [Image.open("document_page.png")]
-queries = ["What key insights are presented on this page?"]
+# 3. Prepare inputs — four example document pages
+pages = [
+    hf_hub_download("sentence-transformers/example-documents", f"doc{i}.jpg", repo_type="dataset")
+    for i in range(1, 5)
+]
+images = [Image.open(p).convert("RGB") for p in pages]
+queries = [
+    "What is the variable represented on the y-axis of the graph?",
+    "Total outlay is maximum in which year?",
+]
 
 image_batch = processor.process_images(images).to(model.device)
 query_batch = processor.process_queries(queries).to(model.device)
@@ -229,10 +237,14 @@ with torch.inference_mode():
     query_embeddings = model(**query_batch)
 
 scores = processor.score(query_embeddings, image_embeddings)
-print("Late-interaction retrieval scores:", scores)
+print(scores)
+# tensor([[17.3750, 10.9375,  7.8750,  7.3438],
+#         [ 6.5938, 13.3750,  6.2188,  6.0938]])
+print("Best page per query:", scores.argmax(dim=1))
+# Best page per query: tensor([0, 1])
 ```
 
-> ⚠️ Apply `enable_bidirectional_attention(model)` once after loading, and reset `model.rope_deltas = None` before every query forward pass. Both are required to reach the scores above. [`bidirectional.py`](bidirectional.py) ships with this repository because released `colpali-engine` builds ColQwen3.5 with causal masks.
+> ⚠️ Apply `enable_bidirectional_attention(model)` once after loading, and reset `model.rope_deltas = None` before every query forward pass. Both are required to reach the scores above. [`bidirectional.py`](bidirectional.py) ships with this repository because released `colpali-engine` builds ColQwen3.5 with causal masks; run the snippet from the repository root so the import resolves.
 
 ### CLI
 
@@ -255,14 +267,31 @@ from sentence_transformers import MultiVectorEncoder
 
 model = MultiVectorEncoder("tencent/EVIE-Preview-4.5B")
 
-queries = ["What key insights are presented on this page?"]
-documents = ["document_page.png"]
+queries = [
+    "What is the variable represented on the y-axis of the graph?",
+    "Total outlay is maximum in which year?",
+]
+documents = [
+    "https://huggingface.co/datasets/sentence-transformers/example-documents/resolve/main/doc1.jpg",
+    "https://huggingface.co/datasets/sentence-transformers/example-documents/resolve/main/doc2.jpg",
+    "https://huggingface.co/datasets/sentence-transformers/example-documents/resolve/main/doc3.jpg",
+    "https://huggingface.co/datasets/sentence-transformers/example-documents/resolve/main/doc4.jpg",
+]
 
 query_embeddings = model.encode_query(queries)
 document_embeddings = model.encode_document(documents)
+print(query_embeddings[0].shape, document_embeddings[0].shape)
+# torch.Size([23, 128]) torch.Size([755, 128])
 
 scores = model.similarity(query_embeddings, document_embeddings)
+print(scores)
+# tensor([[17.3457, 10.8008,  7.8613,  7.3174],
+#         [ 6.5547, 13.3828,  6.2207,  6.0771]])
+print("Best page per query:", scores.argmax(dim=1))
+# Best page per query: tensor([0, 1])
 ```
+
+Both paths above run on the same four example pages, so they are directly comparable. The two sets of scores agree closely; the small differences come from the attention backend and dtype, and the ranking is identical.
 
 Documents may be file paths, URLs or `PIL.Image` objects. Text passed to `encode_document` is rendered as a query, since this model has no separate text-document format.
 
