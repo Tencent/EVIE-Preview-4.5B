@@ -28,6 +28,8 @@ from PIL import Image
 from colpali_engine.models import ColQwen3_5, ColQwen3_5Processor
 from colpali_engine.utils.maxsim import maxsim_inbatch
 
+from bidirectional import enable_bidirectional_attention
+
 V1 = [
     "arxivqa_test_subsampled",
     "docvqa_test_subsampled",
@@ -241,7 +243,7 @@ def main() -> int:
     model = ColQwen3_5.from_pretrained(
         args.model, torch_dtype=torch.bfloat16, attn_implementation=args.attn
     )
-    model.enable_bidirectional_attention()
+    enable_bidirectional_attention(model)
     model = model.to("cuda").eval()
 
     result, cache = {}, {}

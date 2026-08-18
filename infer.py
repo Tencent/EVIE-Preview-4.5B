@@ -8,6 +8,8 @@ from PIL import Image
 
 from colpali_engine.models import ColQwen3_5, ColQwen3_5Processor
 
+from bidirectional import enable_bidirectional_attention
+
 
 def load(model_id: str, device: str = "cuda"):
     model = ColQwen3_5.from_pretrained(
@@ -16,7 +18,7 @@ def load(model_id: str, device: str = "cuda"):
         device_map=device,
         attn_implementation="flash_attention_2",
     ).eval()
-    model.enable_bidirectional_attention()
+    enable_bidirectional_attention(model)
     return model, ColQwen3_5Processor.from_pretrained(model_id)
 
 

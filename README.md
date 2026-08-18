@@ -24,6 +24,7 @@ tags:
 - document-retrieval
 - multimodal
 - state-of-the-art
+- sentence-transformers
 base_model:
 - Qwen/Qwen3.5-4B
 datasets:
@@ -181,6 +182,8 @@ Queries in **English, French, German, Italian, Spanish, Portuguese and Chinese**
 
 ## ⚡ Quick Start
 
+ColPali Engine is the reference path — every number on this card comes from it. A [Sentence Transformers](#sentence-transformers) path is also available for late-interaction pipelines already built on that API.
+
 ### Installation
 
 ```bash
@@ -194,6 +197,8 @@ import torch
 from PIL import Image
 from colpali_engine.models import ColQwen3_5, ColQwen3_5Processor
 
+from bidirectional import enable_bidirectional_attention
+
 model_id = "tencent/EVIE-Preview-4.5B"
 
 # 1. Load model and enable bidirectional attention
@@ -203,7 +208,7 @@ model = ColQwen3_5.from_pretrained(
     device_map="cuda",
     attn_implementation="flash_attention_2",
 ).eval()
-model.enable_bidirectional_attention()
+enable_bidirectional_attention(model)
 
 # 2. Load processor
 processor = ColQwen3_5Processor.from_pretrained(model_id)
@@ -225,12 +230,48 @@ scores = processor.score(query_embeddings, image_embeddings)
 print("Late-interaction retrieval scores:", scores)
 ```
 
-> ⚠️ Call `model.enable_bidirectional_attention()` and reset `model.rope_deltas = None` before every query forward pass. Both are required to reach the scores above.
+> ⚠️ Apply `enable_bidirectional_attention(model)` once after loading, and reset `model.rope_deltas = None` before every query forward pass. Both are required to reach the scores above. [`bidirectional.py`](bidirectional.py) ships with this repository because released `colpali-engine` builds ColQwen3.5 with causal masks.
 
 ### CLI
 
 ```bash
 python infer.py --query "Quarterly revenue report" --image page_1.png --image page_2.png
+```
+
+### Sentence Transformers
+
+EVIE also loads as a [Sentence Transformers](https://www.sbert.net/) `MultiVectorEncoder`, exposing the familiar `encode_query` / `encode_document` / `similarity` API with MaxSim scoring built in. Bidirectional attention is baked into the shipped configuration, so no extra call is needed.
+
+`MultiVectorEncoder` requires Sentence Transformers 6.0.0, which is not on PyPI yet — install from source until it is released:
+
+```bash
+pip install "sentence-transformers[image] @ git+https://github.com/huggingface/sentence-transformers.git"
+```
+
+```python
+from sentence_transformers import MultiVectorEncoder
+
+model = MultiVectorEncoder("tencent/EVIE-Preview-4.5B")
+
+queries = ["What key insights are presented on this page?"]
+documents = ["document_page.png"]
+
+query_embeddings = model.encode_query(queries)
+document_embeddings = model.encode_document(documents)
+
+scores = model.similarity(query_embeddings, document_embeddings)
+```
+
+Documents may be file paths, URLs or `PIL.Image` objects. Text passed to `encode_document` is rendered as a query, since this model has no separate text-document format.
+
+The default page budget is the 768-token tier. To score the 1,792-token tier, raise the pixel budget through `processor_kwargs`:
+
+```python
+model = MultiVectorEncoder(
+    "tencent/EVIE-Preview-4.5B",
+    model_kwargs={"attn_implementation": "flash_attention_2", "device_map": "cuda:0"},
+    processor_kwargs={"size": {"longest_edge": 1792 * 32 * 32, "shortest_edge": 65536}},
+)
 ```
 
 ---
